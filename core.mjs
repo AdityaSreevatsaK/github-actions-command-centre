@@ -1,8 +1,45 @@
 export const OWNER = 'AdityaSreevatsaK';
+export const PUBLIC_BATCH_SIZE = 8;
+export const AUTH_BATCH_SIZE = 75;
 export const LIVE = new Set(['queued', 'in_progress', 'pending', 'requested', 'waiting']);
 export const FAILURES = new Set(['failure', 'timed_out', 'action_required', 'stale', 'startup_failure']);
-const SECURITY_SAFE_URL = /^https:\/\/github\.com\//i;
+const SAFE_RUN_URL = /^https:\/\/github\.com\/[a-z0-9-]{1,39}\/[a-z0-9_.-]{1,100}\/actions\/runs\/[0-9]+(?:\/attempts\/[0-9]+)?\/?$/i;
 
+export function parseAccountName(value) {
+  const name=String(value||'').trim();
+  return /^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(name) && !name.includes('--') ? name : null;
+}
+export function parseRepoName(value) {
+  const s=String(value||'').trim().replace(/^https:\/\/github\.com\//i,'').replace(/\.git\/?$/i,'').replace(/\/$/,'');
+  const parts=s.split('/');
+  if(parts.length!==2 || !parseAccountName(parts[0]) || !/^[a-z0-9_.-]{1,100}$/i.test(parts[1]) || parts[1]==='.' || parts[1]==='..')return null;
+  return `${parts[0]}/${parts[1]}`;
+}
+export function selectBatch(repos, checked, {authenticated=false, more=false, target=null}={}) {
+  if(target)return repos.filter(r=>r.full_name.toLowerCase()===target.toLowerCase());
+  const max=authenticated?AUTH_BATCH_SIZE:PUBLIC_BATCH_SIZE;
+  if(more)return repos.filter(r=>!checked.has(r.full_name)).slice(0,max);
+  if(!authenticated && checked.size)return repos.filter(r=>checked.has(r.full_name)).slice(0,max);
+  if(authenticated && checked.size>=repos.length)return repos.slice(0,max);
+  return repos.filter(r=>!checked.has(r.full_name)).slice(0,max);
+}
+export function rateDecision(status, headers, message='', now=Date.now()) {
+  const rawRemaining=headers.get('x-ratelimit-remaining');
+  const rawReset=headers.get('x-ratelimit-reset');
+  const rawRetry=headers.get('retry-after');
+  const remaining=rawRemaining===null?null:Number(rawRemaining);
+  const resetAt=rawReset===null?null:Number(rawReset)*1000;
+  const limited=status===429 || (status===403 && (remaining===0 || /(?:rate limit|secondary limit|abuse detection)/i.test(message)));
+  if(!limited)return {limited:false,remaining,resetAt};
+  let retryAt=remaining===0 && Number.isFinite(resetAt)?resetAt:null;
+  if(rawRetry){
+    const seconds=Number(rawRetry);
+    const date=Number.isFinite(seconds) ? now+seconds*1000:Date.parse(rawRetry);
+    if(Number.isFinite(date))retryAt=Math.max(date,retryAt||0);
+  }
+  if(!retryAt || retryAt<=now)retryAt=now+60000;
+  return {limited:true,remaining,resetAt,retryAt};
+}
 export function currentStatus(run) {
   const s = String(run.status || '').toLowerCase();
   if (s !== 'completed') return s || 'unknown';
@@ -22,9 +59,13 @@ export function statusLabel(run) {
   return labels[s] || (s.charAt(0).toUpperCase() + s.slice(1).replaceAll('_',' '));
 }
 export function normaliseRun(run, repo) {
+  const safeRepo=parseRepoName(repo.full_name);
+  if(!safeRepo)throw new Error('Invalid GitHub repository data.');
+  const defaultUrl=`https://github.com/${safeRepo}/actions`;
+  const htmlUrl=String(run.html_url||'');
   return {
     id: String(run.id),
-    repo: repo.full_name,
+    repo: safeRepo,
     isPrivate: !!repo.private,
     name: String(run.display_title || run.name || 'Untitled workflow'),
     workflow: String(run.name || 'Workflow'),
@@ -36,7 +77,7 @@ export function normaliseRun(run, repo) {
     created_at: run.created_at || null,
     run_started_at: run.run_started_at || null,
     updated_at: run.updated_at || null,
-    url: SECURITY_SAFE_URL.test(run.html_url || '') ? run.html_url : `https://github.com/${repo.full_name}/actions`,
+    url: SAFE_RUN_URL.test(htmlUrl) && htmlUrl.toLowerCase().startsWith(`https://github.com/${safeRepo.toLowerCase()}/`) ? htmlUrl : defaultUrl,
     run_number: Number(run.run_number || 0),
     attempt: Number(run.run_attempt || 1)
   };
@@ -95,8 +136,8 @@ export function summary(runs, now = Date.now()) {
 }
 export function githubError(status, message='') {
   if (status===401) return 'GitHub rejected the token. Check that it is valid and has not expired.';
-  if (status===403 && /rate limit/i.test(message)) return 'GitHub API rate limit reached. Reconnect with a read-only token or try again later.';
-  if (status===403) return 'GitHub denied access. Check your token’s repository selection and Actions: Read permission.';
+  if ((status===403 && /rate limit|abuse detection/i.test(message)) || status===429) return 'GitHub API rate limit reached. Further requests are paused.';
+  if (status===403) return 'GitHub denied access. Check the repository selection and Actions: Read permission.';
   if (status===404) return 'Repository not found or not accessible with this token.';
   return `GitHub API returned HTTP ${status}.`;
 }

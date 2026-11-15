@@ -51,3 +51,36 @@ test('errors explain access problems without echoing token',()=>{
   assert.match(githubError(403,'API rate limit exceeded'),/rate limit/);
   assert.match(githubError(401),/rejected the token/);
 });
+
+import {PUBLIC_BATCH_SIZE,AUTH_BATCH_SIZE,parseAccountName,parseRepoName,selectBatch,rateDecision} from '../core.mjs';
+test('safe public account and repository inputs reject path/URL tricks',()=>{
+  assert.equal(parseAccountName('example-user'),'example-user');
+  assert.equal(parseAccountName('evil--user'),null);
+  assert.equal(parseAccountName('foo/bar'),null);
+  assert.equal(parseRepoName('https://github.com/Example/Hello.git'),'Example/Hello');
+  assert.equal(parseRepoName('https://github.com/Example/Hello/issues/2'),null);
+  assert.equal(parseRepoName('example/example?token=secret'),null);
+});
+test('public scans are budgeted and incremental',()=>{
+  const all=Array.from({length:18},(_,i)=>({full_name:`someone/repo-${i}`}));
+  const checked=new Set();
+  const initial=selectBatch(all,checked);
+  assert.equal(initial.length,PUBLIC_BATCH_SIZE);
+  initial.forEach(r=>checked.add(r.full_name));
+  assert.deepEqual(selectBatch(all,checked),initial);
+  assert.equal(selectBatch(all,checked,{more:true})[0].full_name,'someone/repo-8');
+  assert.equal(selectBatch(all,checked,{authenticated:true,more:true}).length,10);
+  assert.equal(AUTH_BATCH_SIZE,75);
+});
+test('rate limit handling respects reset and retry-after, not permission errors',()=>{
+  const now=Date.parse('2026-11-15T18:00:00Z');
+  const h1=new Headers({'x-ratelimit-remaining':'0','x-ratelimit-reset':String(now/1000+300)});
+  assert.equal(rateDecision(403,h1,'API rate limit exceeded',now).retryAt,now+300000);
+  const h2=new Headers({'retry-after':'120','x-ratelimit-remaining':'22'});
+  assert.equal(rateDecision(429,h2,'secondary rate limit',now).retryAt,now+120000);
+  assert.equal(rateDecision(403,new Headers(),'Resource not accessible',now).limited,false);
+});
+test('run URLs reject lookalike GitHub domains and other repositories',()=>{
+  assert.equal(fixture({html_url:'https://github.com.attacker.test/foo'}).url,'https://github.com/AdityaSreevatsaK/Test-Repo/actions');
+  assert.equal(fixture({html_url:'https://github.com/Other/Repo/actions/runs/99'}).url,'https://github.com/AdityaSreevatsaK/Test-Repo/actions');
+});
