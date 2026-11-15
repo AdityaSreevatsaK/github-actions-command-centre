@@ -13,3 +13,13 @@
 .warning-details summary{cursor:pointer;}
 .warning-details li{line-height:1.6;overflow-wrap:anywhere;}
 @media(max-width:700px){.owner-form{align-items:stretch}.owner-form input{max-width:none;min-width:0}.owner-form button{width:100%}.owner-form .owner-help{width:100%}.coverage-note{padding:12px 16px}}
+
+/* Interactive summary cards. The selected state is visible without relying on colour alone. */
+.metric-button{display:block;width:100%;text-align:left;color:inherit;font:inherit;cursor:pointer;transition:border-color .15s ease,background .15s ease,transform .15s ease}
+.metric-button:hover{border-color:#70cbb9;background:#1c2d3a;transform:translateY(-2px)}
+.metric-button.active,.metric-button[aria-pressed="true"]{border-color:#7ce5ce;background:#1c3339;box-shadow:inset 0 0 0 1px #7ce5ce55}
+.metric-button.active .metric-glyph{color:#95f5de}
+.metric-button.active:after{content:'FILTER ACTIVE';display:inline-block;color:#9de9d8;font-size:9px;font-weight:800;letter-spacing:1.2px;margin-top:8px}
+.metric-button:focus-visible{outline:3px solid #86e9db;outline-offset:3px}
+.metric-coverage-note{color:#9cafc1;font-size:11px;margin:-29px 0 27px;line-height:1.6}
+@media(prefers-reduced-motion:reduce){.metric-button{transition:none}.metric-button:hover{transform:none}}

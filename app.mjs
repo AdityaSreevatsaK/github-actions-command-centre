@@ -243,13 +243,14 @@ async function scan({deep=false,rediscover=false,more=false,target=null}={}){
     state.lastChecked=new Date();
     const coverage=state.checked.size;
     const total=state.repos.length;
+    state.stale=paused || state.quotaPausedUntil>Date.now();
     if(paused || state.quotaPausedUntil>Date.now())setNotice(quotaText()+` Coverage: ${coverage}/${total} repositories.`);
     else if(state.warnings.length)setNotice(`${state.warnings.length} repository request${state.warnings.length===1?'':'s'} failed. Previous successful results are preserved. See the details below.`);
     else if(coverage<total)setNotice(`Preview coverage: ${coverage} of ${total} repositories. Counts are partial. Use “Scan next ${token?AUTH_BATCH_SIZE:PUBLIC_BATCH_SIZE}” or connect a read-only token for broader coverage.`);
     else setNotice('');
     renderWarnings();
   }catch(error){
-    if(!signal.aborted)setNotice(error.rateLimited?quotaText():error.message);
+    if(!signal.aborted){state.stale=true;setNotice(error.rateLimited?quotaText():error.message);}
   }finally{
     if(!signal.aborted){setScanning(false);render();renderWarnings();}
   }
@@ -293,10 +294,22 @@ function renderEmpty(body,heading,description){
 function render(){
   const shown=sortRuns(filterRuns(state.runs,{status:state.status,query:state.query,repo:state.repo,days:state.days}));
   const total=summary(state.runs);
-  $('metric-running').textContent=String(total.running);
-  $('metric-queued').textContent=String(total.queued);
-  $('metric-failed').textContent=String(total.failed24);
-  $('metric-passed').textContent=String(total.passed24);
+  // A failed scan must not masquerade as four confirmed zeroes.
+  const hasSample=state.checked.size>0;
+  $('metric-running').textContent=hasSample?String(total.running):'–';
+  $('metric-queued').textContent=hasSample?String(total.queued):'–';
+  $('metric-failed').textContent=hasSample?String(total.failed24):'–';
+  $('metric-passed').textContent=hasSample?String(total.passed24):'–';
+  const checkedCount=state.checked.size;
+  const repoTotal=state.repos.length;
+  const metricCaption=!hasSample
+    ? (state.quotaPausedUntil>Date.now()
+      ? 'Counts unavailable: GitHub API rate limit reached. Connect a read-only token or retry after the reset time.'
+      : state.scanning?'Loading activity: no repositories checked yet.':'Counts unavailable: no repositories successfully checked yet.')
+    : checkedCount<repoTotal
+      ? `Partial results: ${checkedCount}/${repoTotal} repositories checked.${state.stale?' Showing previously loaded data.':''}`
+      : `${repoTotal} repositories sampled.${state.stale?' Some results may be outdated.':''}`;
+  $('metric-coverage-note').textContent=metricCaption;
   $('side-live-count').textContent=String(total.running+total.queued);
   $('row-count').textContent=String(shown.length);
   $('repo-count').textContent=String(state.repos.length);
@@ -313,7 +326,16 @@ function render(){
   const reset=state.rateReset?` · resets ${new Date(state.rateReset*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:'';
   $('rate-info').textContent=state.rateRemaining===null?'':`API quota: ${state.rateRemaining}${state.rateLimit?` / ${state.rateLimit}`:''}${reset}`;
 }
-function filterStatus(value){state.status=value;state.show=40;document.querySelectorAll('.tab').forEach(b=>{const selected=b.dataset.status===value;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected));});render();}
+function filterStatus(value){
+  state.status=value;state.show=40;
+  document.querySelectorAll('.tab').forEach(b=>{const selected=b.dataset.status===value;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected));});
+  document.querySelectorAll('[data-metric]').forEach(b=>{
+    const selected=b.dataset.metric===value;
+    b.classList.toggle('active',selected);
+    b.setAttribute('aria-pressed',String(selected));
+  });
+  render();
+}
 function openModal(){
   modalReturnFocus=document.activeElement;
   $('modal-backdrop').hidden=false;$('token-error').hidden=true;$('token-input').value='';
@@ -382,6 +404,16 @@ $('watch-form').addEventListener('submit',event=>{
   $('watch-input').value='';renderWatchList();updateRepoDropdown();scan({target:name});
 });
 document.querySelectorAll('[data-status]').forEach(button=>button.addEventListener('click',()=>filterStatus(button.dataset.status)));
+document.querySelectorAll('[data-metric]').forEach(button=>button.addEventListener('click',()=>{
+  const next=state.status===button.dataset.metric?'all':button.dataset.metric;
+  // The failed and passed cards explicitly describe the last 24 hours.
+  if(next==='failed'||next==='success'){
+    state.days=1;
+    $('days-filter').value='1';
+  }
+  filterStatus(next);
+  document.querySelector('.monitor-panel').scrollIntoView({behavior:'smooth',block:'start'});
+}));
 $('sidebar-live').addEventListener('click',()=>filterStatus('live'));
 $('sidebar-failures').addEventListener('click',()=>filterStatus('failed'));
 $('sidebar-all').addEventListener('click',()=>filterStatus('all'));

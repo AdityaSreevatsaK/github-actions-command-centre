@@ -104,6 +104,18 @@ def main():
         assert page.locator('#metric-failed').inner_text()=='1'
         assert page.locator('#row-count').inner_text()=='3'
         assert page.locator('#autorefresh').is_disabled()
+        assert page.locator('#metric-coverage-note').inner_text().startswith('2 repositories sampled')
+        for kind,expected in [('running','1'),('queued','1'),('failed','1'),('success','0')]:
+            card=page.locator(f'[data-metric="{kind}"]')
+            card.click()
+            assert card.get_attribute('aria-pressed')=='true'
+            assert page.locator('#row-count').inner_text()==expected
+            if kind in ('failed','success'):
+                assert page.locator('#days-filter').input_value()=='1'
+            card.click()
+            assert card.get_attribute('aria-pressed')=='false'
+            assert page.locator('#row-count').inner_text()=='3'
+        page.locator('#days-filter').select_option('7')
         page.evaluate('window.__etagMode=true')
         page.locator('#refresh-btn').click()
         page.wait_for_function("!document.querySelector('#refresh-btn').disabled")
@@ -191,11 +203,30 @@ def main():
         quota.wait_for_function("document.querySelector('#notice').textContent.includes('Scanning paused')")
         assert quota.evaluate('window.__count')==4, 'Exceeded rate limit should stop remaining requests'
         assert quota.locator('#repo-count').inner_text()=='15'
+        assert quota.locator('#metric-coverage-note').inner_text().startswith('Partial results: 2/15 repositories checked.')
         assert quota.locator('#scan-next').is_visible()
         quota.locator('#scan-next').click()
         quota.wait_for_timeout(150)
         assert quota.evaluate('window.__count')==4, 'Do not issue requests during cooldown'
         assert quota_errors==[],quota_errors
+        # If discovery is rate-limited before a single successful repository scan,
+        # the dashboard must show unavailable values rather than false zeroes.
+        blocked_html=html.replace('window.fetch = async (url, options={}) => {', '''
+    window.fetch = async (url, options={}) => {
+      const headers=new Headers({'content-type':'application/json','x-ratelimit-remaining':'0',
+        'x-ratelimit-limit':'60','x-ratelimit-reset':String(Math.floor(Date.now()/1000)+3600)});
+      return new Response(JSON.stringify({message:'API rate limit exceeded'}),{status:403,headers});
+    };
+    window.__unused = async (url, options={}) => {''')
+        blocked=browser.new_page(viewport={'width':1050,'height':850})
+        blocked_errors=[]
+        blocked.on('pageerror',lambda e:blocked_errors.append(str(e)))
+        blocked.set_content(blocked_html,wait_until='load')
+        blocked.wait_for_function("document.querySelector('#notice').textContent.includes('Scanning paused')")
+        for kind in ('running','queued','failed','passed'):
+            assert blocked.locator(f'#metric-{kind}').inner_text()=='–'
+        assert 'Counts unavailable' in blocked.locator('#metric-coverage-note').inner_text()
+        assert blocked_errors==[],blocked_errors
         browser.close()
     print('PASS: public mode, filters, token, deep scan, disconnect, quota stop, public batch, account switch, ETag cache, no storage, mobile layout')
     print('Previews: preview-desktop.png, preview-mobile.png')

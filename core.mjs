@@ -106,6 +106,8 @@ export function filterRuns(runs, {status='all',query='',repo='all',days=7}={}, n
   return runs.filter(r=>{
     const group = groupStatus(r);
     if (status === 'live' && !LIVE.has(currentStatus(r))) return false;
+    if (status === 'running' && currentStatus(r) !== 'in_progress') return false;
+    if (status === 'queued' && (!LIVE.has(currentStatus(r)) || currentStatus(r) === 'in_progress')) return false;
     if (status === 'failed' && group !== 'failed') return false;
     if (status === 'success' && group !== 'success') return false;
     if (status === 'cancelled' && group !== 'cancelled') return false;
