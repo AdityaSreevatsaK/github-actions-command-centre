@@ -68,7 +68,8 @@ def main():
     window.fetch = async (url, options={}) => {
       const uri = new URL(url);
       const path = uri.pathname;
-      const headers = new Headers({'content-type':'application/json','x-ratelimit-remaining':'4999','x-ratelimit-reset':String(Math.floor(Date.now()/1000)+3600)});
+      const headers = new Headers({'content-type':'application/json','etag':'"fixture-v1"','x-ratelimit-remaining':'4999','x-ratelimit-reset':String(Math.floor(Date.now()/1000)+3600)});
+      if(window.__etagMode && options.headers?.['If-None-Match']==='"fixture-v1"') return new Response(null,{status:304,headers});
       let value;
       if (path.startsWith('/users/') && path.endsWith('/repos')) value = window.__fake.repos.filter(r=>!r.private);
       else if(path==='/user'){
@@ -103,6 +104,11 @@ def main():
         assert page.locator('#metric-failed').inner_text()=='1'
         assert page.locator('#row-count').inner_text()=='3'
         assert page.locator('#autorefresh').is_disabled()
+        page.evaluate('window.__etagMode=true')
+        page.locator('#refresh-btn').click()
+        page.wait_for_function("!document.querySelector('#refresh-btn').disabled")
+        assert page.locator('#row-count').inner_text()=='3', 'ETag 304 must retain cached results'
+        page.evaluate('window.__etagMode=false')
         page.locator('.tab[data-status="failed"]').click()
         assert page.locator('#row-count').inner_text()=='1'
         assert 'Lint and tests' in page.locator('#runs-body').inner_text()
@@ -115,6 +121,17 @@ def main():
         page.wait_for_function("document.querySelector('#repo-count').textContent==='3'")
         assert 'RichardDaffern/Novel_Library' in page.locator('#watch-list').inner_text()
         page.locator('.watch-chip').click()
+        page.wait_for_function("document.querySelector('#repo-count').textContent==='2'")
+        # An unrelated public user can view their account without an access token.
+        page.evaluate('window.__fake.repos = [{name:"Hello-World",full_name:"octocat/Hello-World",owner:{login:"octocat"},private:false,archived:false}]')
+        page.locator('#owner-input').fill('octocat')
+        page.locator('#owner-submit').click()
+        page.wait_for_function("document.querySelector('#repo-count').textContent==='1'")
+        assert page.locator('#account-display').inner_text()=='octocat'
+        assert page.locator('#profile-link').get_attribute('href')=='https://github.com/octocat'
+        page.evaluate('window.__fake.repos = '+json.dumps(repos))
+        page.locator('#owner-input').fill('AdityaSreevatsaK')
+        page.locator('#owner-submit').click()
         page.wait_for_function("document.querySelector('#repo-count').textContent==='2'")
         page.screenshot(path=str(ROOT/'preview-desktop.png'),full_page=True)
         page.locator('#connect-btn').click()
@@ -143,6 +160,18 @@ def main():
         assert mobile.locator('h1').is_visible()
         assert mobile.locator('#connect-btn').is_visible()
         assert mobile.locator('#owner-form').is_visible()
+        # Public preview intentionally loads eight repositories at a time.
+        many=[{'name':f'public-{i}','full_name':f'AdityaSreevatsaK/public-{i}',
+                'owner':{'login':'AdityaSreevatsaK'},'private':False,'archived':False} for i in range(18)]
+        public_html=html.replace('window.__fake = { repos: '+json.dumps(repos), 'window.__fake = { repos: '+json.dumps(many))
+        public=browser.new_page(viewport={'width':1050,'height':850})
+        public.set_content(public_html,wait_until='load')
+        public.wait_for_function("document.querySelector('#coverage-note').textContent.includes('8/18')")
+        public.locator('#scan-next').click()
+        public.wait_for_function("document.querySelector('#coverage-note').textContent.includes('16/18')")
+        public.locator('#scan-next').click()
+        public.wait_for_function("document.querySelector('#coverage-note').textContent.includes('18/18')")
+        assert public.locator('#scan-next').is_hidden()
         # Test quota stop behaviour with 15 repos, forcing a rate-limit response after two scan requests.
         extra=[{'name':f'public-{i}','full_name':f'AdityaSreevatsaK/public-{i}',
                 'owner':{'login':'AdityaSreevatsaK'},'private':False,'archived':False} for i in range(15)]
@@ -168,7 +197,7 @@ def main():
         assert quota.evaluate('window.__count')==4, 'Do not issue requests during cooldown'
         assert quota_errors==[],quota_errors
         browser.close()
-    print('PASS: public mode, filters, token, deep scan, disconnect, quota stop, no storage, mobile layout')
+    print('PASS: public mode, filters, token, deep scan, disconnect, quota stop, public batch, account switch, ETag cache, no storage, mobile layout')
     print('Previews: preview-desktop.png, preview-mobile.png')
 
 if __name__=='__main__':main()
