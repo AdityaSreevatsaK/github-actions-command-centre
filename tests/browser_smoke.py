@@ -70,7 +70,11 @@ def main():
       const path = uri.pathname;
       const headers = new Headers({'content-type':'application/json','x-ratelimit-remaining':'4999','x-ratelimit-reset':String(Math.floor(Date.now()/1000)+3600)});
       let value;
-      if (path.startsWith('/users/') && path.endsWith('/repos')) value = window.__fake.repos.slice(0,2);
+      if (path.startsWith('/users/') && path.endsWith('/repos')) value = window.__fake.repos.filter(r=>!r.private);
+      else if(path==='/user'){
+        if(options.headers?.Authorization!=='Bearer github_pat_test_readonly')return new Response(JSON.stringify({message:'Bad credentials'}),{status:401,headers});
+        value={login:'AdityaSreevatsaK'};
+      }
       else if(path==='/user/repos'){
         if(options.headers?.Authorization!=='Bearer github_pat_test_readonly')return new Response(JSON.stringify({message:'Bad credentials'}),{status:401,headers});
         value=uri.searchParams.get('per_page')==='1' ? window.__fake.repos.slice(0,1) : window.__fake.repos;
@@ -138,8 +142,33 @@ def main():
         mobile.screenshot(path=str(ROOT/'preview-mobile.png'),full_page=True)
         assert mobile.locator('h1').is_visible()
         assert mobile.locator('#connect-btn').is_visible()
+        assert mobile.locator('#owner-form').is_visible()
+        # Test quota stop behaviour with 15 repos, forcing a rate-limit response after two scan requests.
+        extra=[{'name':f'public-{i}','full_name':f'AdityaSreevatsaK/public-{i}',
+                'owner':{'login':'AdityaSreevatsaK'},'private':False,'archived':False} for i in range(15)]
+        quota_html=html.replace('window.__fake = { repos: '+json.dumps(repos), 'window.__fake = { repos: '+json.dumps(extra))
+        quota_html=quota_html.replace('window.fetch = async (url, options={}) => {', '''
+    window.__count=0;
+    const rateHeaders=new Headers({'content-type':'application/json','x-ratelimit-remaining':'0',
+      'x-ratelimit-limit':'60','x-ratelimit-reset':String(Math.floor(Date.now()/1000)+3600)});
+    window.fetch = async (url, options={}) => {
+      window.__count++;
+      if(window.__count>3)return new Response(JSON.stringify({message:'API rate limit exceeded'}),{status:403,headers:rateHeaders});
+        ''')
+        quota=browser.new_page(viewport={'width':1100,'height':840})
+        quota_errors=[]
+        quota.on('pageerror',lambda e:quota_errors.append(str(e)))
+        quota.set_content(quota_html,wait_until='load')
+        quota.wait_for_function("document.querySelector('#notice').textContent.includes('Scanning paused')")
+        assert quota.evaluate('window.__count')==4, 'Exceeded rate limit should stop remaining requests'
+        assert quota.locator('#repo-count').inner_text()=='15'
+        assert quota.locator('#scan-next').is_visible()
+        quota.locator('#scan-next').click()
+        quota.wait_for_timeout(150)
+        assert quota.evaluate('window.__count')==4, 'Do not issue requests during cooldown'
+        assert quota_errors==[],quota_errors
         browser.close()
-    print('PASS: public mode, status filters, search, private token, deep scan, disconnect, no storage, mobile layout')
+    print('PASS: public mode, filters, token, deep scan, disconnect, quota stop, no storage, mobile layout')
     print('Previews: preview-desktop.png, preview-mobile.png')
 
 if __name__=='__main__':main()
