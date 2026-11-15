@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A read-only command centre for GitHub Actions across an account.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://api.github.com; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests">
+  <title>Actions Command Centre · AdityaSreevatsaK</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="brand" href="./" aria-label="Actions Command Centre home"><span class="brand-symbol">⌘</span><span><strong>Actions</strong><small>COMMAND CENTRE</small></span></a>
+      <div class="sidebar-title">WORKSPACE</div>
+      <div class="nav-item selected"><span class="nav-icon">▦</span> Overview <span class="nav-indicator"></span></div>
+      <a class="nav-item" href="https://github.com/AdityaSreevatsaK" target="_blank" rel="noopener noreferrer"><span class="nav-icon">⌂</span> GitHub profile <span class="external-arrow">↗</span></a>
+      <div class="sidebar-title sidebar-title-lower">MONITORING</div>
+      <button class="nav-item nav-button" type="button" id="sidebar-live"><span class="nav-icon live-icon">●</span> Live runs <span class="nav-count" id="side-live-count">0</span></button>
+      <button class="nav-item nav-button" type="button" id="sidebar-failures"><span class="nav-icon error-icon">◆</span> Failures</button>
+      <button class="nav-item nav-button" type="button" id="sidebar-all"><span class="nav-icon">☷</span> All runs</button>
+      <div class="sidebar-bottom">
+        <div class="privacy-card"><div class="privacy-head"><span>◈</span> <strong>Privacy by design</strong></div><p>Private workflow data stays in your browser. Nothing is saved or published.</p></div>
+        <div class="sidebar-foot">Made for <b>AdityaSreevatsaK</b><br>Read-only GitHub API client</div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div><div class="top-actions"><span class="live-dot" aria-hidden="true"></span><span class="live-note" id="connection-note">Public repositories</span><button id="connect-btn" class="button button-outline" type="button">Connect private repos <span>↗</span></button></div></header>
+      <div class="content">
+        <section class="hero"><div class="eyebrow"><span class="tiny-line"></span> YOUR GITHUB OPERATIONS, ONE VIEW</div><div class="hero-flex"><div><h1>All systems.<br><em>One command centre.</em></h1><p class="hero-sub">Track every workflow run across your repositories. See what’s running, what’s waiting and what needs your attention.</p></div><div class="hero-aside"><div class="avatar">AS</div><div class="profile-line"><strong>AdityaSreevatsaK</strong><small>GitHub account</small></div></div></div></section>
+        <section class="section-metrics" aria-label="Workflow summary">
+          <div class="metric"><div class="metric-label"><span class="metric-dot blue"></span> RUNNING NOW <span class="metric-glyph">↗</span></div><div class="metric-number" id="metric-running">–</div><div class="metric-foot">Workflows in progress</div></div>
+          <div class="metric"><div class="metric-label"><span class="metric-dot amber"></span> IN QUEUE <span class="metric-glyph">◷</span></div><div class="metric-number" id="metric-queued">–</div><div class="metric-foot">Waiting to start</div></div>
+          <div class="metric"><div class="metric-label"><span class="metric-dot red"></span> FAILED <span class="metric-glyph">↘</span></div><div class="metric-number" id="metric-failed">–</div><div class="metric-foot">In the last 24 hours</div></div>
+          <div class="metric"><div class="metric-label"><span class="metric-dot green"></span> PASSED <span class="metric-glyph">✓</span></div><div class="metric-number" id="metric-passed">–</div><div class="metric-foot">In the last 24 hours</div></div>
+        </section>
+        <section class="monitor-panel"><div class="section-heading"><div><div class="eyebrow mini">REAL-TIME ACTIVITY</div><h2>Workflow runs <span class="count-badge" id="row-count">0</span></h2><p>Latest GitHub Actions activity across your selected repositories.</p></div><div class="heading-actions"><label class="auto-toggle"><input id="autorefresh" type="checkbox" disabled><span class="toggle-track"></span> Auto-refresh</label><button class="button button-primary" id="refresh-btn" type="button"><span class="refresh-icon">⟳</span> Refresh</button></div></div>
+          <div class="filterbar"><div class="tabs" role="group" aria-label="Filter by status"><button class="tab active" type="button" data-status="all">All runs</button><button class="tab" type="button" data-status="live">Active</button><button class="tab" type="button" data-status="failed">Failed</button><button class="tab" type="button" data-status="success">Passed</button><button class="tab" type="button" data-status="cancelled">Cancelled</button></div><div class="filter-controls"><label class="search-wrap"><span>⌕</span><input id="search" type="search" placeholder="Search runs..." aria-label="Search workflow runs" autocomplete="off"></label><select id="repo-filter" aria-label="Filter by repository"><option value="all">All repositories</option></select><select id="days-filter" aria-label="Filter by recency"><option value="1">Last 24 hours</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option><option value="99999">Any date</option></select></div></div>
+          <div id="notice" class="notice" role="status" hidden></div>
+          <div class="table-scroll"><table class="runs-table"><thead><tr><th>WORKFLOW</th><th>REPOSITORY</th><th>STATUS</th><th>TRIGGER</th><th>STARTED</th><th>DURATION</th><th aria-label="Open run"></th></tr></thead><tbody id="runs-body"><tr><td colspan="7" class="empty-state"><span class="empty-icon">↻</span><strong>Connecting to GitHub</strong><small>Loading your repositories and recent workflow runs...</small></td></tr></tbody></table></div>
+          <div class="table-footer"><div id="scan-info">Waiting for initial scan</div><div class="footer-right"><span id="rate-info"></span><button id="load-more" class="subtle-button" type="button" hidden>Show more ↓</button></div></div>
+        </section>
+        <section class="lower-info"><div class="info-box"><div class="info-icon">◎</div><div><strong>Coverage you can trust</strong><p>Each refresh checks the latest 100 runs per repository. Use <b>Deep scan</b> to check every active status, including older queued runs.</p></div><button class="button button-outline" id="deep-scan" type="button">Deep scan ↗</button></div><div class="info-box second"><div class="info-icon">☷</div><div><strong>Account coverage</strong><p><span id="repo-count">0</span> repositories discovered. <span id="scope-label">Public-only mode</span>.</p></div><select id="scope" aria-label="Repositories to include"><option value="owned">My repositories</option><option value="accessible">All accessible</option></select></div><div class="info-box third"><div class="info-icon">＋</div><div><strong>Monitor another account’s repository</strong><p>For example, <b>RichardDaffern/Novel_Library</b>. External repositories need to be public or accessible with your token.</p><div class="watch-list" id="watch-list"></div></div><form id="watch-form" class="watch-form"><input id="watch-input" type="text" placeholder="owner/repository" aria-label="Additional repository" autocomplete="off" spellcheck="false"><button class="button button-outline" type="submit">Add repo</button></form></div></section>
+        <footer class="page-footer">Not affiliated with GitHub. Data is requested directly from GitHub’s API. <a href="https://docs.github.com/en/rest/actions/workflow-runs" target="_blank" rel="noopener noreferrer">API documentation ↗</a></footer>
+      </div>
+    </main>
+  </div>
+  <div id="modal-backdrop" class="modal-backdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button class="modal-close" id="modal-close" type="button" aria-label="Close">×</button><span class="modal-eyebrow">READ-ONLY CONNECTION</span><h2 id="modal-title">Connect private repositories</h2><p>Use a fine-grained GitHub personal access token with <strong>Metadata: Read</strong> and <strong>Actions: Read</strong> for the repositories you wish to monitor.</p><p class="help-note">The token is held in this tab’s memory only. It is never stored, logged, sent to this site’s hosting service or added to a URL. Reloading clears it.</p><form id="token-form"><label for="token-input">Fine-grained personal access token</label><div class="token-row"><input id="token-input" type="password" placeholder="github_pat_..." autocomplete="off" spellcheck="false" required><button class="button button-primary" type="submit">Connect</button></div><div class="modal-links"><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">Create a fine-grained token ↗</a><button type="button" id="disconnect" class="link-button">Disconnect</button></div></form><div id="token-error" class="token-error" role="alert" hidden></div></section>
+  </div>
+</body>
+</html>
