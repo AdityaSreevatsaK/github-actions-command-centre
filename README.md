@@ -9,7 +9,7 @@ A free, read-only dashboard to monitor workflow runs across multiple GitHub repo
 1. Open the site.
 2. Enter **your GitHub username**, then select **View account**.
 3. The public preview scans up to **8 repositories** per request batch to avoid exhausting GitHub's API allowance. Select **Scan next 8 repositories** to extend coverage. The counts clearly indicate when coverage is partial.
-4. Filter by status, repository, date or search term. Select a run to open it on GitHub.
+4. Select the **Running**, **In queue**, **Failed** or **Passed** card to filter matching runs; select it again to reset. Failed and Passed cards filter to the last 24 hours. You can also filter by status, repository, date or search term. Select a run to open it on GitHub.
 5. Optionally, add another `owner/repository` to your watch list.
 
 You do not need a token for public repositories. Without authentication, GitHub generally allows only **60 API requests per hour, shared per originating IP address**, so public mode deliberately avoids attempting to scan every repository in one request burst.
@@ -31,7 +31,7 @@ To access private repositories, select **Connect read-only token** and follow th
 - Normal scans load the latest **100 runs per selected repository**. Deep scan (token required) searches live statuses across additional pages, and is more expensive.
 - GitHub's API has primary and secondary rate limits. The dashboard reads response headers, pauses requests when throttled and indicates the reset time. Use **Scan next** after the cooldown or connect with read-only access.
 - When a single repository fails, other results remain visible. Each failure appears in the expandable warnings section.
-- The dashboard explicitly shows `checked/total` coverage. Partial or retained data is **not** a complete account-wide live snapshot.
+- The dashboard explicitly shows `checked/total` coverage. Partial or retained data is **not** a complete account-wide live snapshot. If no repository has loaded successfully, summary cards show **–** rather than inaccurate zero counts.
 - Query results are not saved. Refreshing clears them; every new tab performs its own requests.
 - A static site cannot provide unlimited quota, securely hold user credentials on a server or guarantee all runs are detected without authentication and sufficient API allowance.
 - The dashboard only reads GitHub data; it never starts, cancels or reruns workflows.

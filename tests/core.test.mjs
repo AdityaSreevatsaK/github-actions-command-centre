@@ -84,3 +84,10 @@ test('run URLs reject lookalike GitHub domains and other repositories',()=>{
   assert.equal(fixture({html_url:'https://github.com.attacker.test/foo'}).url,'https://github.com/AdityaSreevatsaK/Test-Repo/actions');
   assert.equal(fixture({html_url:'https://github.com/Other/Repo/actions/runs/99'}).url,'https://github.com/AdityaSreevatsaK/Test-Repo/actions');
 });
+
+test('running and queued summary drill-downs remain distinct',()=>{
+  const r=[fixture({id:71,status:'in_progress',conclusion:null}),fixture({id:72,status:'queued',conclusion:null}),fixture({id:73,status:'waiting',conclusion:null}),fixture({id:74,status:'completed',conclusion:'success'})];
+  assert.deepEqual(filterRuns(r,{status:'running',days:1},now).map(x=>x.id),['71']);
+  assert.deepEqual(filterRuns(r,{status:'queued',days:1},now).map(x=>x.id),['72','73']);
+  assert.deepEqual(filterRuns(r,{status:'live',days:1},now).map(x=>x.id),['71','72','73']);
+});
